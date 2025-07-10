@@ -1,5 +1,8 @@
 # dorc
 
+利用IP，测试域名所在的地区
+
+
 修改成合适的 路径 
 
 file_loc="/etc/smartdns/data/domain2loc.$Query_ID.csv"
