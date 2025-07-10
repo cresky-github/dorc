@@ -1,0 +1,104 @@
+#!/bin/bash
+
+
+declare -l Region
+declare -l Domain
+declare -l IP
+declare -l Query_IP
+declare -l Resolve
+
+
+Domain=$1
+Query_ID=$2
+
+FLAG_DIRECT="Direct"
+FLAG_PROXY="Proxy"
+file_loc="/etc/smartdns/data/domain2loc.$Query_ID.csv"
+file_noip="/etc/smartdns/data/noip.$Query_ID.txt"
+if [[ ${#Query_ID} -eq 0 ]] ;then
+    Query_ID="x"
+    file_loc="/etc/smartdns/data/domain2loc.csv"
+    file_noip="/etc/smartdns/data/noip.txt"
+fi
+file_query="/tmp/test.resolve.$Query_ID.txt"
+file_ipset="/tmp/test.resolve.$Query_ID.ipset"
+file_ipset_cn="/tmp/test.resolve.cn.$Query_ID.ipset"
+file_ipset_ncn="/tmp/test.resolve.ncn.$Query_ID.ipset"
+
+REG_IP="([0-9]{1,3}\.){3}[0-9]{1,3}"
+#REG_DOMAIN=`echo "$Domain" | sed -e "s/\./\\\\\./g"`
+
+REG_DOMAIN_QUERY="([A-Za-z0-9-]+\.)+[A-Za-z]+"
+
+noip(){
+    echo ""
+    echo -e  ">>>> noip : \t$Domain"
+    echo "$Domain" >> $file_noip
+    echo ""
+}
+
+dig +tcp +short $Domain -4 -p 5353 | sort -u -o $file_ipset_cn &
+dig +tcp +short $Domain -4 -p 5354 | sort -u -o $file_ipset_ncn &
+
+wait
+
+
+grep -Eo "([a-zA-Z0-9-]+\.)+[a-zA-Z]+" $file_ipset_cn | sort -u -o /tmp/cname.dset
+if [[ ! -s /tmp/cname.dset ]];then
+    while read DOMAIN; do
+        dig +tcp +short $DOMAIN >> $file_ipset_cn
+    done < /tmp/cname.dset
+fi
+
+
+grep -Eo "([a-zA-Z0-9-]+\.)+[a-zA-Z]+" $file_ipset_ncn | sort -u -o /tmp/cname.dset
+if [[ ! -s /tmp/cname.dset ]];then
+    while read DOMAIN; do
+        dig +tcp +short $DOMAIN >> $file_ipset_ncn
+    done < /tmp/cname.dset
+fi
+
+grep -Eo "([0-9]{1,3}\.){3}[0-9]{1,3}" $file_ipset_cn | cidr-merger > /tmp/temp.$Query_ID.ipset
+sort -u /tmp/temp.$Query_ID.ipset -o $file_ipset_cn
+grep -Eo "([0-9]{1,3}\.){3}[0-9]{1,3}" $file_ipset_ncn | cidr-merger > /tmp/temp.$Query_ID.ipset
+sort -u /tmp/temp.$Query_ID.ipset -o $file_ipset_ncn
+
+
+if [[ ! -s $file_ipset_cn ]] && [[ ! -s $file_ipset_ncn ]];then
+    noip
+    exit
+fi
+
+
+comm -12 $file_ipset_cn $file_ipset_ncn | sort -u -o $file_ipset
+comm -23 $file_ipset_cn $file_ipset | sort -u -o $file_ipset_cn
+comm -23 $file_ipset_ncn $file_ipset | sort -u -o $file_ipset_ncn
+
+echo "" > $file_query
+sed -i "/^$/d" $file_query
+while read IP; do
+    Region=`ip2loc $IP`
+    echo ",$Domain,$Region,$IP,$Region,$IP,COMM," >> $file_query
+done < $file_ipset
+
+while read IP; do
+    Region=`ip2loc $IP`
+    echo ",$Domain,,,$Region,$IP,DIRECT," >> $file_query
+done < $file_ipset_cn
+
+while read IP; do
+    Region=`ip2loc $IP`
+    echo ",$Domain,$Region,$IP,,,PROXY," >> $file_query
+done < $file_ipset_ncn
+
+sed -i "/^$/d;/,0\.0\.0\.1,/d;/,10\.128\./d;/^$/d;/,127\./d;/,,,,,/d;/warning:/d" $file_query
+if [[ ! -s $file_query ]];then
+    noip
+    rm -rf /tmp/Query_ID/$Query_ID
+    exit
+fi
+sort -t "," -k7 -u $file_query -o $file_query
+cat $file_query
+cat $file_query >> $file_loc
+
+rm -rf /tmp/Query_ID/$Query_ID
