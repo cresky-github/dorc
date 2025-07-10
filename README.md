@@ -47,6 +47,8 @@ dig +tcp +short $Domain -4 -p 5354 | sort -u -o $file_ipset_ncn &
     
     PROXY 仅国外DNS解析返回值
     
+第八列，空
+    
 用到其它组件
 
 [cide-merger] (https://github.com/zhanhb/cidr-merger)
