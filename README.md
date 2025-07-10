@@ -23,6 +23,8 @@ dig +tcp +short $Domain -4 -p 5354 | sort -u -o $file_ipset_ncn &
 
 列说明
 
+![image](https://github.com/user-attachments/assets/4a0a8d39-a391-4324-b3ae-0b4c99210ce2)
+
 ![image](https://github.com/user-attachments/assets/9f547a78-3334-46e7-9235-48bf0075fd82)
 
 第一列，空
